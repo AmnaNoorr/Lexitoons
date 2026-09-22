@@ -1,0 +1,4 @@
+<key>NSMicrophoneUsageDescription</key>
+<string>Microphone access is required for speech recognition.</string>
+<key>NSSpeechRecognitionUsageDescription</key>
+<string>Speech recognition is required to evaluate pronunciation.</string>
