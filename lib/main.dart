@@ -18,7 +18,7 @@ class LexitoonsApp extends StatelessWidget {
         fontFamily: 'Arial', // You can add a custom Urdu font later
         primarySwatch: Colors.amber,
       ),
-      home: const LexitoonsGameScreen(),
+      home: const ParkSceneScreen(),
     );
   }
 }
