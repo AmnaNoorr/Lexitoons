@@ -55,7 +55,35 @@ class _ParkSceneScreenState extends State<ParkSceneScreen> {
       onTap: () => _controller.onItemTapped(item.id),
     );
   }
+  Widget _buildWordWidget(String itemId, String imageAsset, double height) {
+    final isCollected = _controller.collectedIds.contains(itemId);
+    final isCurrent = _controller.currentItem?.id == itemId;
 
+    // 1. Faded when collected
+    double opacity = 1.0;
+    if (isCollected) {
+      opacity = 0.25;
+    }
+
+    return AnimatedOpacity(
+      opacity: opacity,
+      duration: const Duration(milliseconds: 300),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: isCurrent && !isCollected 
+              ? Colors.yellow.withOpacity(0.3) 
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isCurrent && !isCollected
+              ? Border.all(color: Colors.yellow, width: 2)
+              : null,
+        ),
+        child: Image.asset(imageAsset, height: height, fit: BoxFit.contain),
+      ),
+    );
+  }
   Widget? _buildActiveItemOverlay() {
     final id = _controller.activeItemId;
     final anim = _controller.activeAnim;
@@ -148,11 +176,11 @@ class _ParkSceneScreenState extends State<ParkSceneScreen> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         textDirection: TextDirection.rtl,
                         children: [
-                          Image.asset('assets/images/word_leemu.png', height: 55, fit: BoxFit.contain),
-                          Image.asset('assets/images/word_larki.png', height: 55, fit: BoxFit.contain),
-                          Image.asset('assets/images/word_lakri.png', height: 55, fit: BoxFit.contain),
-                          Image.asset('assets/images/word_gulaab.png', height: 55, fit: BoxFit.contain),
-                          Image.asset('assets/images/word_jhoola.png', height: 40, fit: BoxFit.contain),
+                          _buildWordWidget('leemu', 'assets/images/word_leemu.png', 55),
+                          _buildWordWidget('larki', 'assets/images/word_larki.png', 55),
+                          _buildWordWidget('lakri', 'assets/images/word_lakri.png', 55),
+                          _buildWordWidget('gulab', 'assets/images/word_gulaab.png', 55),
+                          _buildWordWidget('jhoola', 'assets/images/word_jhoola.png', 40),
                         ],
                       ),
                     ),
