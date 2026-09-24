@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-/// A single object in the park scene the child must find and name.
 class GameItem {
   const GameItem({
     required this.id,
@@ -10,24 +9,13 @@ class GameItem {
     required this.rect,
   });
 
-  /// Stable identifier used internally, e.g. 'leemu'.
   final String id;
-
-  /// Asset shown in the scene.
   final String imageAsset;
-
-  /// Urdu word spoken by the narrator for this item.
   final String urduLabel;
-
-  /// Acceptable spoken answers matched against speech-to-text output.
   final List<String> matchWords;
-
-  /// Position and size inside the 700x840 scene canvas (see
-  /// ParkSceneScreen.figmaWidth/figmaHeight).
   final Rect rect;
 }
 
-/// The five findable objects, in the same order as the word banner.
 List<GameItem> buildParkSceneItems() => const [
       GameItem(
         id: 'leemu',

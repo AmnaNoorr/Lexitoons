@@ -2,39 +2,39 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/game_item.dart';
+import '../services/audio_prompt_player.dart';
 import '../services/speech_recognizer_service.dart';
-import '../services/urdu_narrator.dart';
 
-enum GamePhase { idle, prompting, awaitingTap, awaitingSpeech, celebrating, finished }
+enum GamePhase { idle, prompting, awaitingTap, awaitingSpeech, finished }
+enum ItemAnim { focusing, focused, returning, flying }
 
 class ParkGameController extends ChangeNotifier {
   ParkGameController({
     required this.items,
-    UrduNarrator? narrator,
+    AudioPromptPlayer? audio,
     SpeechRecognizerService? speechService,
-  })  : _narrator = narrator ?? UrduNarrator(),
+  })  : _audio = audio ?? AudioPromptPlayer(),
         _speech = speechService ?? SpeechRecognizerService();
 
   final List<GameItem> items;
-  final UrduNarrator _narrator;
+  final AudioPromptPlayer _audio;
   final SpeechRecognizerService _speech;
 
   static const int _maxAttemptsPerItem = 2;
-  static const List<String> _encouragements = [
-    'کوئی بات نہیں، دوبارہ کوشش کرو۔',
-    'بہت اچھے، ایک بار پھر کوشش کرو۔',
-    'کوئی مسئلہ نہیں، آہستہ آہستہ بولو۔',
-  ];
+  static const List<String> _retryKeys = ['retry_1', 'retry_2', 'retry_3'];
 
   int _currentIndex = 0;
   GamePhase phase = GamePhase.idle;
-  String? highlightedItemId;
-  String? flyingItemId;
-  String? _lastPrompt;
+
+  /// The one item currently away from its resting spot (mid-focus,
+  /// mid-return, or flying to the basket), and what it's doing.
+  String? activeItemId;
+  ItemAnim? activeAnim;
+
   final Set<String> collectedIds = {};
 
   Completer<void>? _tapCompleter;
-  Completer<void>? _flightCompleter;
+  Completer<void>? _animCompleter;
   bool _cancelled = false;
 
   GameItem? get currentItem =>
@@ -42,10 +42,7 @@ class ParkGameController extends ChangeNotifier {
 
   Future<void> start() async {
     _cancelled = false;
-    await _say(
-      'چلو، پارک میں پانچ چیزیں ڈھونڈتے ہیں: '
-      '${items.map((i) => i.urduLabel).join('، ')}۔',
-    );
+    await _audio.play('intro');
     await _runRound();
   }
 
@@ -56,61 +53,64 @@ class ParkGameController extends ChangeNotifier {
 
       phase = GamePhase.prompting;
       notifyListeners();
-      await _say('${item.urduLabel} کو ڈھونڈو اور اس پر انگلی رکھو۔');
+      await _audio.play('read_prompt');
       if (_cancelled) return;
+
+      await _attemptItem(item);
+      if (_cancelled) return;
+    }
+
+    phase = GamePhase.finished;
+    notifyListeners();
+    await _audio.play('outro');
+  }
+
+  /// Runs touch -> name -> (basket or back-in-place) for one item,
+  /// retrying on a wrong answer until it succeeds or attempts run out.
+  Future<void> _attemptItem(GameItem item) async {
+    var attempt = 0;
+    while (true) {
+      attempt++;
 
       phase = GamePhase.awaitingTap;
       notifyListeners();
       await _waitForTap();
       if (_cancelled) return;
 
-      highlightedItemId = item.id;
+      await _runItemAnim(item, ItemAnim.focusing);
+      activeAnim = ItemAnim.focused;
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 600));
 
-      await _askAndListen(item);
-      if (_cancelled) return;
-    }
-
-    phase = GamePhase.finished;
-    notifyListeners();
-    await _say('شاباش! تم نے سب چیزیں ڈھونڈ لیں۔');
-  }
-
-  Future<void> _askAndListen(GameItem item) async {
-    var attempt = 0;
-    while (attempt < _maxAttemptsPerItem) {
-      attempt++;
       phase = GamePhase.awaitingSpeech;
       notifyListeners();
-      await _say('شاباش! اب بتاؤ، یہ کیا ہے؟');
-
       final heard = await _speech.listenOnce();
-      if (_speech.matches(heard, item.matchWords)) {
-        await _say('بہت خوب، بالکل ٹھیک!');
-        await _sendToBasket(item);
+      final correct = _speech.matches(heard, item.matchWords);
+      final outOfAttempts = attempt >= _maxAttemptsPerItem;
+
+      if (correct || outOfAttempts) {
+        await _audio.play('praise_correct');
+        await _runItemAnim(item, ItemAnim.flying);
+        collectedIds.add(item.id);
+        activeItemId = null;
+        activeAnim = null;
+        notifyListeners();
         return;
       }
-      if (attempt < _maxAttemptsPerItem) {
-        await _say(_encouragements[(attempt - 1) % _encouragements.length]);
-      }
+
+      await _audio.play(_retryKeys[(attempt - 1) % _retryKeys.length]);
+      await _runItemAnim(item, ItemAnim.returning);
+      activeItemId = null;
+      activeAnim = null;
+      notifyListeners();
     }
-    // Don't trap the child on one item if pronunciation isn't recognized.
-    await _sendToBasket(item);
   }
 
-  Future<void> _sendToBasket(GameItem item) async {
-    phase = GamePhase.celebrating;
-    flyingItemId = item.id;
-    highlightedItemId = null;
+  Future<void> _runItemAnim(GameItem item, ItemAnim anim) async {
+    activeItemId = item.id;
+    activeAnim = anim;
     notifyListeners();
-
-    _flightCompleter = Completer<void>();
-    await _flightCompleter!.future;
-
-    collectedIds.add(item.id);
-    flyingItemId = null;
-    notifyListeners();
+    _animCompleter = Completer<void>();
+    await _animCompleter!.future;
   }
 
   Future<void> _waitForTap() {
@@ -118,17 +118,7 @@ class ParkGameController extends ChangeNotifier {
     return _tapCompleter!.future;
   }
 
-  Future<void> _say(String text) async {
-    _lastPrompt = text;
-    await _narrator.speak(text);
-  }
-
-  /// Repeats whatever was last narrated. The UI disables this while
-  /// the mic is listening, so playback and recognition don't overlap.
-  Future<void> replayPrompt() async {
-    final text = _lastPrompt;
-    if (text != null) await _narrator.speak(text);
-  }
+  Future<void> replayPrompt() => _audio.replayLast();
 
   void onItemTapped(String id) {
     if (phase == GamePhase.awaitingTap &&
@@ -139,16 +129,17 @@ class ParkGameController extends ChangeNotifier {
     }
   }
 
-  void onFlightAnimationComplete() {
-    if (_flightCompleter != null && !_flightCompleter!.isCompleted) {
-      _flightCompleter!.complete();
+  /// Called by the UI when the focus/return/flight animation finishes.
+  void onItemAnimComplete() {
+    if (_animCompleter != null && !_animCompleter!.isCompleted) {
+      _animCompleter!.complete();
     }
   }
 
   @override
   void dispose() {
     _cancelled = true;
-    _narrator.stop();
+    _audio.stop();
     super.dispose();
   }
 }

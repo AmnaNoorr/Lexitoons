@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../controllers/park_game_controller.dart';
 import '../models/game_item.dart';
+import '../widgets/fixed_aspect_screen.dart';
 import '../widgets/tappable_scene_item.dart';
 
 class ParkSceneScreen extends StatefulWidget {
@@ -36,153 +37,198 @@ class _ParkSceneScreenState extends State<ParkSceneScreen> {
     }
   }
 
+  Rect _focusRect(Rect original) {
+    const maxDimension = 260.0;
+    final longer = original.width > original.height ? original.width : original.height;
+    final scale = maxDimension / longer;
+    const center = Offset(ParkSceneScreen.figmaWidth / 2, ParkSceneScreen.figmaHeight / 2);
+    return Rect.fromCenter(center: center, width: original.width * scale, height: original.height * scale);
+  }
+
   Widget _sceneItem(GameItem item) {
     return TappableSceneItem(
       item: item,
       isTappable: _controller.phase == GamePhase.awaitingTap &&
           _controller.currentItem?.id == item.id,
-      isHighlighted: _controller.highlightedItemId == item.id,
       isHidden: _controller.collectedIds.contains(item.id) ||
-          _controller.flyingItemId == item.id,
+          _controller.activeItemId == item.id,
       onTap: () => _controller.onItemTapped(item.id),
+    );
+  }
+
+  Widget? _buildActiveItemOverlay() {
+    final id = _controller.activeItemId;
+    final anim = _controller.activeAnim;
+    if (id == null || anim == null) return null;
+    final item = _item(id);
+    final focus = _focusRect(item.rect);
+
+    late final Rect start;
+    late final Rect end;
+    var showRing = true;
+    switch (anim) {
+      case ItemAnim.focusing:
+        start = item.rect;
+        end = focus;
+        break;
+      case ItemAnim.focused:
+        start = focus;
+        end = focus;
+        break;
+      case ItemAnim.returning:
+        start = focus;
+        end = item.rect;
+        break;
+      case ItemAnim.flying:
+        start = focus;
+        end = ParkSceneScreen.basketRect;
+        showRing = false;
+        break;
+    }
+
+    return _AnimatedItem(
+      key: ValueKey('$id-$anim'),
+      imageAsset: item.imageAsset,
+      start: start,
+      end: end,
+      showRing: showRing,
+      onComplete: _controller.onItemAnimComplete,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Center(
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: SizedBox(
-              width: ParkSceneScreen.figmaWidth,
-              height: ParkSceneScreen.figmaHeight,
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) => Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    Positioned(
-                      left: 0, top: 0, width: 700, height: 840,
-                      child: Image.asset('assets/images/background.png', fit: BoxFit.fill),
-                    ),
-                    _sceneItem(_item('lakri')),
-                    _sceneItem(_item('jhoola')),
-                    Positioned(
-                      left: 450, top: 269, width: 277, height: 277,
-                      child: Image.asset('assets/images/lemon_stall.png', fit: BoxFit.contain),
-                    ),
-                    _sceneItem(_item('leemu')),
-                    _sceneItem(_item('larki')),
-                    _sceneItem(_item('gulab')),
+    return FixedAspectScreen(
+      designWidth: ParkSceneScreen.figmaWidth,
+      designHeight: ParkSceneScreen.figmaHeight,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final overlay = _buildActiveItemOverlay();
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Positioned(
+                left: 0, top: 0, width: 700, height: 840,
+                child: Image.asset('assets/images/background.png', fit: BoxFit.fill),
+              ),
+              _sceneItem(_item('lakri')),
+              _sceneItem(_item('jhoola')),
+              Positioned(
+                left: 450, top: 269, width: 277, height: 277,
+                child: Image.asset('assets/images/lemon_stall.png', fit: BoxFit.contain),
+              ),
+              _sceneItem(_item('leemu')),
+              _sceneItem(_item('larki')),
+              _sceneItem(_item('gulab')),
 
-                    // 8. Bottom Green Banner & Urdu Words (unchanged)
+              Positioned(
+                left: 0,
+                top: 730,
+                width: 700,
+                height: 110,
+                child: Stack(
+                  children: [
+                    Image.asset('assets/images/green_rectangle.png',
+                        width: 700, height: 110, fit: BoxFit.fill),
                     Positioned(
-                      left: 0,
-                      top: 730,
-                      width: 700,
-                      height: 110,
-                      child: Stack(
+                      left: 20,
+                      top: 12,
+                      width: 100,
+                      height: 85,
+                      child: Image.asset('assets/images/basket.png', fit: BoxFit.contain),
+                    ),
+                    Positioned(
+                      left: 135,
+                      right: 15,
+                      top: 15,
+                      bottom: 15,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        textDirection: TextDirection.rtl,
                         children: [
-                          Image.asset('assets/images/green_rectangle.png',
-                              width: 700, height: 110, fit: BoxFit.fill),
-                          Positioned(
-                            left: 20,
-                            top: 12,
-                            width: 100,
-                            height: 85,
-                            child: Image.asset('assets/images/basket.png', fit: BoxFit.contain),
-                          ),
-                          Positioned(
-                            left: 135,
-                            right: 15,
-                            top: 15,
-                            bottom: 15,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              textDirection: TextDirection.rtl,
-                              children: [
-                                Image.asset('assets/images/word_leemu.png', height: 55, fit: BoxFit.contain),
-                                Image.asset('assets/images/word_larki.png', height: 55, fit: BoxFit.contain),
-                                Image.asset('assets/images/word_lakri.png', height: 55, fit: BoxFit.contain),
-                                Image.asset('assets/images/word_gulaab.png', height: 55, fit: BoxFit.contain),
-                                Image.asset('assets/images/word_jhoola.png', height: 40, fit: BoxFit.contain),
-                              ],
-                            ),
-                          ),
+                          Image.asset('assets/images/word_leemu.png', height: 55, fit: BoxFit.contain),
+                          Image.asset('assets/images/word_larki.png', height: 55, fit: BoxFit.contain),
+                          Image.asset('assets/images/word_lakri.png', height: 55, fit: BoxFit.contain),
+                          Image.asset('assets/images/word_gulaab.png', height: 55, fit: BoxFit.contain),
+                          Image.asset('assets/images/word_jhoola.png', height: 40, fit: BoxFit.contain),
                         ],
                       ),
                     ),
-
-                    if (_controller.flyingItemId != null)
-                      _FlyingItem(
-                        imageAsset: _item(_controller.flyingItemId!).imageAsset,
-                        start: _item(_controller.flyingItemId!).rect,
-                        end: ParkSceneScreen.basketRect,
-                        onComplete: _controller.onFlightAnimationComplete,
-                      ),
-                    
-                    if (_started)
-                      Positioned(
-                        left: 16,
-                        top: 16,
-                        child: _ReplayButton(
-                          enabled: _controller.phase != GamePhase.awaitingSpeech,
-                          onTap: _controller.replayPrompt,
-                        ),
-                      ),
-
-                    if (!_started)
-                      Positioned.fill(
-                        child: Container(
-                          color: Colors.black54,
-                          child: Center(
-                            child: ElevatedButton(
-                              onPressed: _startGame,
-                              child: const Text('شروع کریں'),
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
-            ),
-          ),
-        ),
+
+              if (overlay != null) overlay,
+
+              if (_started)
+                Positioned(
+                  left: 16,
+                  top: 16,
+                  child: _ReplayButton(
+                    enabled: _controller.phase != GamePhase.awaitingSpeech,
+                    onTap: _controller.replayPrompt,
+                  ),
+                ),
+
+              if (!_started)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black54,
+                    child: Center(
+                      child: ElevatedButton(
+                        onPressed: _startGame,
+                        child: const Text('شروع کریں'),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _FlyingItem extends StatelessWidget {
-  const _FlyingItem({
+class _AnimatedItem extends StatelessWidget {
+  const _AnimatedItem({
+    super.key,
     required this.imageAsset,
     required this.start,
     required this.end,
+    required this.showRing,
     required this.onComplete,
   });
 
   final String imageAsset;
   final Rect start;
   final Rect end;
+  final bool showRing;
   final VoidCallback onComplete;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 700),
-      curve: Curves.easeInBack,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
       onEnd: onComplete,
       builder: (context, t, child) {
         final rect = Rect.lerp(start, end, t)!;
         return Positioned(
           left: rect.left, top: rect.top, width: rect.width, height: rect.height,
-          child: child!,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(child: child!),
+              if (showRing)
+                const Positioned.fill(
+                  child: IgnorePointer(child: CustomPaint(painter: FocusRingPainter())),
+                ),
+            ],
+          ),
         );
       },
       child: Image.asset(imageAsset, fit: BoxFit.contain),
